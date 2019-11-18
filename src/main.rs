@@ -1,5 +1,4 @@
 mod nasm;
-mod test;
 
 
 use crossbeam_channel::{Sender, Receiver};
@@ -93,29 +92,11 @@ fn main_loop(
                     None=>return Ok(()),
                     Some(r)=>{
                         if let Ok((id,params))=r.clone().cast::<HoverRequest>() {
-                            let mut error:Option<String>=None;
                             let loc=params.text_document.uri.path();
                             let resp:RawResponse;
-                            if let Ok(mut files)=FILES.lock() {
+                            if let Ok(files)=FILES.lock() {
                                 let mut contents:Option<String>=None;
                                 //log.write(b"Got FILES\n").unwrap();
-                                if let Some(nasm_file)=files.get_mut(loc) {
-                                    //log.write(b"Got the file from FILES\n").unwrap();
-                                    if let Err(err)=nasm_file.parse() {
-                                        error=Some(err);
-                                        //log.write(b"NASM parse error\n").unwrap();
-                                    } else {
-                                        //log.write(b"NASM parsed the file").unwrap();
-                                    }
-                                } else {
-                                    //log.write(b"Creating new file for FILES\n").unwrap();
-                                    let mut nasm_file=NasmFile::new();
-                                    if let Err(err)=nasm_file.parse() {
-                                        error=Some(err);
-                                        //log.write(b"NASM parse error\n").unwrap();
-                                    }
-                                    files.insert(loc.to_string(),nasm_file);
-                                }
                                 let line=params.position.line;
                                 if let Some(file)=files.get(loc) {
                                     //log.write(b"Got file from FILES after creation/update\n").unwrap();
@@ -134,13 +115,7 @@ fn main_loop(
                                     &Some(Hover {
                                         contents:HoverContents::Markup(MarkupContent {
                                             kind:MarkupKind::PlainText,
-                                            value:if let Some(err)=error {
-                                                format!("Error: {}",err)
-                                            } else {
-                                                format!("{}",
-                                                    if let Some(c)=contents{c}else{String::new()}
-                                                )
-                                            }
+                                            value:format!("{}",if let Some(c)=contents{c}else{String::new()})
                                         }),
                                         range:None
                                     }),
@@ -184,12 +159,12 @@ fn main_loop(
                     let mut files=FILES.lock().unwrap();
                     if let Some(nasm_file)=files.get_mut(&name) {
                         nasm_file.update_contents(text);
-                        nasm_file.parse();
+                        nasm_file.parse().unwrap();
                         errors=nasm_file.errors.clone();
                     } else {
                         let mut nasm_file=NasmFile::new();
                         nasm_file.update_contents(text);
-                        nasm_file.parse();
+                        nasm_file.parse().unwrap();
                         errors=nasm_file.errors.clone();
                         files.insert(name.to_string(),nasm_file);
                     }
@@ -201,12 +176,12 @@ fn main_loop(
                     let mut files=FILES.lock().unwrap();
                     if let Some(nasm_file)=files.get_mut(&name) {
                         nasm_file.update_contents(text);
-                        nasm_file.parse();
+                        nasm_file.parse().unwrap();
                         errors=nasm_file.errors.clone();
                     } else {
                         let mut nasm_file=NasmFile::new();
                         nasm_file.update_contents(text);
-                        nasm_file.parse();
+                        nasm_file.parse().unwrap();
                         errors=nasm_file.errors.clone();
                         files.insert(name.to_string(),nasm_file);
                     }
@@ -237,7 +212,7 @@ fn main_loop(
                             diagnostics:diag,
                         }
                     );
-                    sender.send(RawMessage::Notification(resp));
+                    sender.send(RawMessage::Notification(resp)).unwrap();
                 }
             },
         }

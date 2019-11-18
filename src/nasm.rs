@@ -45,15 +45,18 @@ impl NasmFile {
         //writeln!(log,"Started execution of NASMFILE").unwrap();
         self.errors=Vec::new();
         let mut command=Command::new("nasm");
-        command.args(&["-o","/dev/null","-f","elf",self.file.path().to_str().unwrap()]);
+        let name=self.file.path().to_str().unwrap();
+        command.args(&["-o","/dev/null","-f","elf64",name]);
         //writeln!(log,"Starting command execution").unwrap();
         if let Ok(output)=command.output() {
             //writeln!(log,"Command executed").unwrap();
             let stderr=String::from_utf8(output.stderr).unwrap();
             //writeln!(log,"STDERR converted").unwrap();
             let stderr=stderr.trim().to_string();
-            for line in stderr.split('\n') {
-                self.errors.push(NasmError::from_string(line.to_string()/*,log*/));
+            if stderr.contains(name) {
+                for line in stderr.split('\n') {
+                    self.errors.push(NasmError::from_string(line.to_string()/*,log*/));
+                }
             }
             //writeln!(log,"Generated errors").unwrap();
         } else {
@@ -65,7 +68,6 @@ impl NasmFile {
 
 #[derive(Clone,Debug,Default,Eq,PartialEq)]
 pub struct NasmError {
-    pub filename:String,
     pub line:usize,
     pub error_type:ErrorType,
     pub contents:String,
@@ -79,9 +81,7 @@ impl NasmError {
                 chars=chars.split_off(i+1);
                 break;
             }
-            error.filename.push(*char);
         }
-        error.filename=error.filename.trim().to_string();
         let mut line=String::new();
         for (i,char) in chars.iter().enumerate() {
             if *char==':'&&i>0 {
