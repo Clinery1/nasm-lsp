@@ -1,5 +1,5 @@
 [package]
-name = "asm-lsp"
+name = "nasm-lsp"
 version = "0.1.0"
 authors = ["Clinery1 <clinery8237@gmail.com>"]
 edition = "2018"

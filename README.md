@@ -6,9 +6,9 @@ A simple implementation of the Language Server Protocol for NASM
 * Vim/NeoVim with [LanguageClient](https://github.com/autozimu/languageclient-neovim):
   * Clone this repository with `git clone https://github.com/Clinery1/nasm-lsp.git`
   * Build with rust nightly (untested with stable) in release mode (`--release`)
-  * Copy the `target/releases/asm-lsp` to the directory of your choice
+  * Copy the `target/releases/nasm-lsp` to the directory of your choice
   * Add the line 
-    ```let g:LanguageClient_serverCommands = {'nasm': ['/path/to/asm-lsp']}```
+    ```let g:LanguageClient_serverCommands = {'nasm': ['/path/to/nasm-lsp']}```
     to your `.vimrc` or `init.vim`
   
 * Recommendation:
