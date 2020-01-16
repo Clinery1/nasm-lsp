@@ -1,4 +1,4 @@
-# nasm-lsp
+# Nasm Language Server
 A simple implementation of the Language Server Protocol for NASM
 
 ----
@@ -12,7 +12,12 @@ A simple implementation of the Language Server Protocol for NASM
     to your `.vimrc` or `init.vim`
   
 * Recommendation:
-  * Add the line `autocmd BufNewFile,BufRead *.asm  set ft=nasm` to your `.vimrc` or `init.vim` to automatically change `*.asm` to nasm filetype
+  * Add the line `autocmd BufNewFile,BufRead *.asm  set ft=nasm` to your `.vimrc` or `init.vim` to automatically change `*.asm` to `nasm` filetype
+
+License
+----
+The entirety of this project is licensed under the BSD 3 clause liscense.
+If there are any questions email me: [clinery8237@gmail.com](mailto:clinery8237@gmail.com)
 
 ----
 **THIS IS A WORK IN PROGRESS, USE AT YOUR OWN RISK**
