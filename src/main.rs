@@ -28,20 +28,7 @@ use gen_lsp_server::{
     RawResponse,
     RawNotification,
 };
-use std::{
-    sync::Mutex,
-    collections::HashMap,
-    //fs::File,
-    //io::Write,
-};
-use lazy_static::lazy_static;
 use nasm::*;
-
-
-lazy_static! {
-    static ref FILES:Mutex<HashMap<String,NasmFile>>=Mutex::new(HashMap::new());
-    //static ref LOG:Mutex<File>=Mutex::new(File::create("log.log").unwrap());
-}
 
 
 fn main() -> Result<(), failure::Error> {
@@ -84,7 +71,8 @@ fn main_loop(
     receiver: &Receiver<RawMessage>,
     sender: &Sender<RawMessage>,
 ) -> Result<(), failure::Error> {
-    //let mut log=LOG.lock().unwrap();
+    let mut file=String::new();
+    let mut errors:Vec<NasmError>=Vec::new();
     for msg in receiver {
         match msg {
             RawMessage::Request(req)=>{
@@ -92,128 +80,69 @@ fn main_loop(
                     None=>return Ok(()),
                     Some(r)=>{
                         if let Ok((id,params))=r.clone().cast::<HoverRequest>() {
-                            let loc=params.text_document.uri.path();
-                            let resp:RawResponse;
-                            if let Ok(files)=FILES.lock() {
-                                let mut contents:Option<String>=None;
-                                //log.write(b"Got FILES\n").unwrap();
-                                let line=params.position.line;
-                                if let Some(file)=files.get(loc) {
-                                    //log.write(b"Got file from FILES after creation/update\n").unwrap();
-                                    for error in file.errors.clone() {
-                                        if error.line-1==line as usize {
-                                            //log.write(format!("Got the right line! Line: {}\n",line).as_bytes()).unwrap();
-                                            contents=Some(format!("{:?}: {}",error.error_type,error.contents));
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    //log.write(b"Did not get file from FILES after creation/update\n").unwrap();
+                            let mut contents:Option<String>=None;
+                            let line=params.position.line;
+                            for error in errors.clone() {
+                                if error.line-1==line as usize {
+                                    contents=Some(format!("{:?}: {}",error.error_type,error.contents));
+                                    break;
                                 }
-                                resp=RawResponse::ok::<HoverRequest>(
-                                    id,
-                                    &Some(Hover {
-                                        contents:HoverContents::Markup(MarkupContent {
-                                            kind:MarkupKind::PlainText,
-                                            value:format!("{}",if let Some(c)=contents{c}else{String::new()})
-                                        }),
-                                        range:None
-                                    }),
-                                );
-                            } else {
-                                resp=RawResponse::ok::<HoverRequest>(
-                                    id,
-                                    &Some(Hover {
-                                        contents:HoverContents::Markup(MarkupContent {
-                                            kind:MarkupKind::PlainText,
-                                            value:String::from("Could not access files"),
-                                        }),
-                                        range:None
-                                    }),
-                                );
                             }
-                            //log.write(b"Writing response...\n").unwrap();
-                            if let Ok(_)=sender.send(RawMessage::Response(resp)) {
-                                //log.write(b"Sent response\n").unwrap();
-                            } else {
-                                //log.write(b"Failed to send response\n").unwrap();
-                            }
-                            //log.write(b"Wrote response!\n").unwrap();
-                        } else {
-                            //log.write(b"Not a hover request\n").unwrap();
-                            // TODO: Add more stuff to here in the `} else if let
-                            // Ok(stuff)=r.cast::<Type>() {}` format
+                            sender.send(
+                                RawMessage::Response(
+                                    RawResponse::ok::<HoverRequest>(
+                                        id,
+                                        &Some(Hover {
+                                            contents:HoverContents::Markup(MarkupContent {
+                                                kind:MarkupKind::PlainText,
+                                                value:format!("{}",if let Some(c)=contents{c}else{String::new()})
+                                            }),
+                                            range:None
+                                        }),
+                                    )
+                                )
+                            ).unwrap();
                         }
                     },
                 };
             },
             RawMessage::Response(_resp)=>{},
             RawMessage::Notification(not)=>{
-                let change:bool;
-                let mut name:String=String::new();
-                let mut errors:Vec<NasmError>=Vec::new();
+                let uri:Url;
                 if let Ok(params)=not.clone().cast::<DidOpenTextDocument>() {
-                    let text_doc=params.text_document;
-                    name=text_doc.uri.path().to_string();
-                    let text=text_doc.text;
-                    let mut files=FILES.lock().unwrap();
-                    if let Some(nasm_file)=files.get_mut(&name) {
-                        nasm_file.update_contents(text);
-                        nasm_file.parse().unwrap();
-                        errors=nasm_file.errors.clone();
-                    } else {
-                        let mut nasm_file=NasmFile::new();
-                        nasm_file.update_contents(text);
-                        nasm_file.parse().unwrap();
-                        errors=nasm_file.errors.clone();
-                        files.insert(name.to_string(),nasm_file);
-                    }
-                    change=true;
+                    let text=params.text_document.text;
+                    uri=params.text_document.uri;
+                    file=text;
                 } else if let Ok(params)=not.cast::<DidChangeTextDocument>() {
-                    let text_doc=params.text_document;
-                    name=text_doc.uri.path().to_string();
-                    let text=params.content_changes[0].text.clone();
-                    let mut files=FILES.lock().unwrap();
-                    if let Some(nasm_file)=files.get_mut(&name) {
-                        nasm_file.update_contents(text);
-                        nasm_file.parse().unwrap();
-                        errors=nasm_file.errors.clone();
-                    } else {
-                        let mut nasm_file=NasmFile::new();
-                        nasm_file.update_contents(text);
-                        nasm_file.parse().unwrap();
-                        errors=nasm_file.errors.clone();
-                        files.insert(name.to_string(),nasm_file);
-                    }
-                    change=true;
-                } else {
-                    change=false;
+                    let changes=params.content_changes.len();
+                    let text=params.content_changes[changes-1].text.clone();
+                    uri=params.text_document.uri;
+                    file=text;
+                } else {continue}
+                errors=Nasm::errors(file.clone()).unwrap();
+                let mut diag:Vec<Diagnostic>=Vec::new();
+                for err in errors.clone() {
+                    let severity=match err.error_type {
+                        ErrorType::Warning=>Some(DiagnosticSeverity::Warning),
+                        ErrorType::Error=>Some(DiagnosticSeverity::Error),
+                        _=>None,
+                    };
+                    diag.push(Diagnostic {
+                        range:Range::new(Position::new(err.line as u64-1,0),Position::new(err.line as u64-1,10)),
+                        severity,
+                        code:None,
+                        source:None,
+                        message:err.contents,
+                        related_information:None,
+                    });
                 }
-                if change {
-                    let mut diag:Vec<Diagnostic>=Vec::new();
-                    for err in errors.clone() {
-                        let severity=match err.error_type {
-                            ErrorType::Warning=>Some(DiagnosticSeverity::Warning),
-                            ErrorType::Error=>Some(DiagnosticSeverity::Error),
-                            _=>None,
-                        };
-                        diag.push(Diagnostic {
-                            range:Range::new(Position::new(err.line as u64-1,0),Position::new(err.line as u64-1,10)),
-                            severity,
-                            code:None,
-                            source:None,
-                            message:err.contents,
-                            related_information:None,
-                        });
+                let resp=RawNotification::new::<PublishDiagnostics>(
+                    &PublishDiagnosticsParams {
+                        uri,
+                        diagnostics:diag,
                     }
-                    let resp=RawNotification::new::<PublishDiagnostics>(
-                        &PublishDiagnosticsParams {
-                            uri:Url::from_file_path(name).unwrap(),
-                            diagnostics:diag,
-                        }
-                    );
-                    sender.send(RawMessage::Notification(resp)).unwrap();
-                }
+                );
+                sender.send(RawMessage::Notification(resp)).unwrap();
             },
         }
     }

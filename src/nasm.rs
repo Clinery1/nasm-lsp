@@ -1,7 +1,6 @@
 use std::{
     process::Command,
     io::Write,
-    //fs::File,
 };
 use tempfile::{
     NamedTempFile,
@@ -19,52 +18,36 @@ impl Default for ErrorType {
 }
 
 
-pub struct NasmFile {
-    pub errors:Vec<NasmError>,
-    pub file:NamedTempFile,
-}
-impl NasmFile {
-    pub fn new()->NasmFile {
-        NasmFile {
-            errors:Vec::new(),
-            file:NamedTempFile::new().expect("Could not create temp file"),
-        }
-    }
-    pub fn update_contents(&mut self,contents:String) {
-        let mut file=self.file.reopen().unwrap();
-        write!(file,"{}",contents).unwrap();
-    }
-    /*pub fn parse_new<'a>(log:&mut File)->Result<NasmFile,String> {
-        let mut ns_file=NasmFile::new();
-        if let Err(string)=ns_file.parse(log) {
-            return Err(string);
-        }
-        return Ok(ns_file);
-    }*/
-    pub fn parse(&mut self,/*log:&mut File*/)->Result<(),String> {
-        //writeln!(log,"Started execution of NASMFILE").unwrap();
-        self.errors=Vec::new();
+pub struct Nasm;
+impl Nasm {
+    pub fn errors<S:Into<String>>(s:S)->Result<Vec<NasmError>,String> {
         let mut command=Command::new("nasm");
-        let name=self.file.path().to_str().unwrap();
-        command.args(&["-o","/dev/null","-f","elf64",name]);
-        //writeln!(log,"Starting command execution").unwrap();
+        let string=s.into();
+        let format=if string.contains("lsp: none") {
+            "bin"
+        } else {
+            "elf64"
+        };
+        let mut named_tmp=NamedTempFile::new().unwrap();
+        named_tmp.write(&string.bytes().collect::<Vec<u8>>()).unwrap();
+        let name=named_tmp.path().to_str().unwrap();
+        command.args(&["-o","/dev/null","-f",format,name]);
         if let Ok(output)=command.output() {
-            //writeln!(log,"Command executed").unwrap();
             let stderr=String::from_utf8(output.stderr).unwrap();
-            //writeln!(log,"STDERR converted").unwrap();
             let stderr=stderr.trim().to_string();
+            let mut errors=Vec::new();
             if stderr.contains(name) {
                 for line in stderr.split('\n') {
-                    self.errors.push(NasmError::from_string(line.to_string()/*,log*/));
+                    errors.push(NasmError::from_string(line.to_string()));
                 }
             }
-            //writeln!(log,"Generated errors").unwrap();
+            return Ok(errors);
         } else {
             return Err("Could not run NASM".to_string());
         }
-        Ok(())
     }
 }
+
 
 #[derive(Clone,Debug,Default,Eq,PartialEq)]
 pub struct NasmError {
@@ -73,7 +56,7 @@ pub struct NasmError {
     pub contents:String,
 }
 impl NasmError {
-    pub fn from_string(input:String,/*log:&mut File*/)->NasmError {
+    pub fn from_string(input:String)->NasmError {
         let mut error:NasmError=NasmError::default();
         let mut chars=input.chars().collect::<Vec<char>>();
         for (i,char) in chars.iter().enumerate() {
@@ -90,9 +73,7 @@ impl NasmError {
             }
             line.push(*char);
         }
-        //writeln!(log,"About to parse number: {:?}",line.trim()).unwrap();
         error.line=line.trim().parse::<usize>().unwrap();
-        //writeln!(log,"Parsed Number").unwrap();
         let mut err_type=String::new();
         for (i,char) in chars.iter().enumerate() {
             if *char==':'&&i>0 {
