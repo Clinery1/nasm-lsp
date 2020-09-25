@@ -28,13 +28,14 @@ use gen_lsp_server::{
     RawResponse,
     RawNotification,
 };
+use std::io::Write;
 use nasm::*;
 
 
 fn main() -> Result<(), failure::Error> {
     let capabilities:ServerCapabilities=ServerCapabilities {
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::Full)),
-        hover_provider: Some(true),
+        hover_provider: Some(false),
         completion_provider: None,
         signature_help_provider: None,
         definition_provider:None,
@@ -71,8 +72,8 @@ fn main_loop(
     receiver: &Receiver<RawMessage>,
     sender: &Sender<RawMessage>,
 ) -> Result<(), failure::Error> {
-    let mut file=String::new();
     let mut errors:Vec<NasmError>=Vec::new();
+    let nasm=Nasm::new();
     for msg in receiver {
         match msg {
             RawMessage::Request(req)=>{
@@ -112,14 +113,12 @@ fn main_loop(
                 if let Ok(params)=not.clone().cast::<DidOpenTextDocument>() {
                     let text=params.text_document.text;
                     uri=params.text_document.uri;
-                    file=text;
+                    nasm.update_files(uri.path(),text);
                 } else if let Ok(params)=not.cast::<DidChangeTextDocument>() {
-                    let changes=params.content_changes.len();
-                    let text=params.content_changes[changes-1].text.clone();
                     uri=params.text_document.uri;
-                    file=text;
+                    nasm.update_files(uri.path(),params.content_changes[0].text.clone());
                 } else {continue}
-                errors=Nasm::errors(file.clone()).unwrap();
+                errors=nasm.get_errors(uri.path()).unwrap();
                 let mut diag:Vec<Diagnostic>=Vec::new();
                 for err in errors.clone() {
                     let severity=match err.error_type {

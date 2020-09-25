@@ -1,9 +1,6 @@
 use std::{
     process::Command,
-    io::Write,
-};
-use tempfile::{
-    NamedTempFile,
+    path::PathBuf,
 };
 
 
@@ -18,26 +15,60 @@ impl Default for ErrorType {
 }
 
 
-pub struct Nasm;
+pub struct Nasm {
+    tempdir:PathBuf,
+}
 impl Nasm {
-    pub fn errors<S:Into<String>>(s:S)->Result<Vec<NasmError>,String> {
+    pub fn new()->Nasm {
+        let pwd=std::env::current_dir().unwrap();
+        let tempdir_name=pwd.to_str().unwrap().chars().map(|input|{if input=='/'{'-'}else{input}}).collect::<String>();
+        let tempdir=PathBuf::from(format!("/tmp/NASMLSP{}",tempdir_name));
+        if !tempdir.exists() {
+            std::fs::create_dir(tempdir.clone()).expect("Could not create tempdir");
+        }
+        let mut c=Command::new("cp");
+        c.arg("-r");
+        for file in std::fs::read_dir(pwd.clone()).unwrap() {
+            let file=file.unwrap();
+            c.arg(&format!("{}",file.path().to_str().unwrap()));
+        }
+        c.arg(&format!("/tmp/NASMLSP{}/",tempdir_name));
+        c.status().unwrap();
+        Nasm {
+            tempdir,
+        }
+    }
+    pub fn update_files<T:Into<String>>(&self,filename:T,text:String) {
+        let pwd=std::env::var("PWD").unwrap();
+        let pathname=filename.into();
+        eprintln!("pwd: {}",pwd);
+        let mut filename=pathname.clone().split_off(pwd.len());
+        if filename.starts_with("/src/") {
+            filename=filename.split_off(5);
+        }
+        let path=format!("{}/{}",self.tempdir.to_str().unwrap(),filename);
+        eprintln!("{}",path);
+        std::fs::write(path,text).unwrap();
+    }
+    pub fn get_errors<T:Into<String>>(&self,filename:T)->Result<Vec<NasmError>,String> {
         let mut command=Command::new("nasm");
-        let string=s.into();
-        let format=if string.contains("lsp: none") {
-            "bin"
-        } else {
-            "elf64"
-        };
-        let mut named_tmp=NamedTempFile::new().unwrap();
-        named_tmp.write(&string.bytes().collect::<Vec<u8>>()).unwrap();
-        let name=named_tmp.path().to_str().unwrap();
-        command.args(&["-o","/dev/null","-f",format,name]);
+        let pwd=std::env::var("PWD").unwrap();
+        let pathname=filename.into();
+        let mut filename=pathname.clone().split_off(pwd.len());
+        if filename.starts_with("/src/") {
+            filename=filename.split_off(5);
+        }
+        let new_pathname=format!("{}/{}",self.tempdir.to_str().unwrap(),filename);
+        command.env("PWD",pwd.clone());
+        command.args(&["-o","/dev/null","-f elf64",&new_pathname]);
+        eprintln!("filename: {},PWD: {},new pathname: {}",pathname,pwd,new_pathname);
         if let Ok(output)=command.output() {
             let stderr=String::from_utf8(output.stderr).unwrap();
             let stderr=stderr.trim().to_string();
             let mut errors=Vec::new();
-            if stderr.contains(name) {
-                for line in stderr.split('\n') {
+            for line in stderr.split('\n') {
+                if line.len()>0 {
+                    eprintln!("Line: {}",line);
                     errors.push(NasmError::from_string(line.to_string()));
                 }
             }
